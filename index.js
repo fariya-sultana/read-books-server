@@ -120,32 +120,55 @@ async function run() {
             const { name, email, returnDate } = req.body;
             const bookId = req.params.id;
 
-            const book = await booksCollection.findOne({ _id: new ObjectId(bookId) });
-
-            if (!book || book.quantity <= 0) {
-                return res.status(400).json({ message: 'Book not available.' });
+            // ✅ Validate ObjectId
+            if (!ObjectId.isValid(bookId)) {
+                return res.status(400).json({ message: 'Invalid book ID' });
             }
 
-            // Decrement quantity using $inc
-            await booksCollection.updateOne(
-                { _id: new ObjectId(bookId), quantity: { $gt: 0 } },
-                { $inc: { quantity: -1 } }
-            );
+            try {
+                const book = await booksCollection.findOne({ _id: new ObjectId(bookId) });
 
-            // Add full book details to borrowed collection
-            await borrowedBooksCollection.insertOne({
-                bookId,
-                name,
-                email,
-                returnDate,
-                borrowedAt: new Date(),
-                title: book.name,
-                image: book.image,
-                category: book.category,
-            });
+                if (!book || book.quantity <= 0) {
+                    return res.status(400).json({ message: 'Book not available.' });
+                }
 
-            res.json({ message: 'Book borrowed successfully' });
+                // Check if user already borrowed this book and hasn’t returned it
+                const alreadyBorrowed = await borrowedBooksCollection.findOne({
+                    email,
+                    bookId: new ObjectId(bookId),
+                });
+
+                if (alreadyBorrowed) {
+                    return res.status(400).json({ message: 'You have already borrowed this book.' });
+                }
+
+                // Decrement quantity
+                await booksCollection.updateOne(
+                    { _id: new ObjectId(bookId), quantity: { $gt: 0 } },
+                    { $inc: { quantity: -1 } }
+                );
+
+                // Save borrowing record
+                await borrowedBooksCollection.insertOne({
+                    bookId: new ObjectId(bookId),
+                    name,
+                    email,
+                    returnDate,
+                    borrowedAt: new Date(),
+                    title: book.name,
+                    image: book.image,
+                    category: book.category,
+                });
+
+                res.json({ message: 'Book borrowed successfully' });
+            } catch (error) {
+                console.error('Borrow error:', error);
+                res.status(500).json({ message: 'Failed to borrow book' });
+            }
         });
+
+
+
 
 
         // GET /borrowed?email=user@example.com
