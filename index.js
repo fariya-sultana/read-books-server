@@ -30,10 +30,25 @@ async function run() {
 
         const categoryCollection = client.db('readBooks').collection('category')
 
+        const booksCollection = client.db('readBooks').collection('books')
+
         app.get('/categories', async (req, res) => {
             const result = await categoryCollection.find().toArray();
             res.send(result);
         })
+
+
+
+        app.get('/books', async (req, res) => {
+            const { category } = req.query;
+
+            const query = category ? { category } : {};
+
+            const result = await booksCollection.find(query).toArray();
+
+            res.send(result);
+        });
+
 
 
         // Send a ping to confirm a successful connection
