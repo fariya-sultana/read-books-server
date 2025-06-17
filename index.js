@@ -1,10 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-
 const app = express();
 const port = process.env.PORT || 3000;
+
+const admin = require("firebase-admin");
+const serviceAccount = require("./firebase-admin-sdk-service-key.json");
+
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 // Middleware
 app.use(cors());
@@ -12,6 +15,7 @@ app.use(express.json());
 
 // MongoDB URI
 const uri = `mongodb+srv://${process.env.READ_BOOKS_USER}:${process.env.READ_BOOKS_PASS}@cluster0.ry0n7jv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -20,19 +24,41 @@ const client = new MongoClient(uri, {
     }
 });
 
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
+
+const verifyFirebaseToken = async (req, res, next) => {
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.decoded = decoded;
+        next();
+    }
+    catch (error) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+}
+
 async function run() {
     try {
         await client.connect();
-        console.log("✅ MongoDB Connected");
 
         const db = client.db('readBooks');
         const booksCollection = db.collection('books');
         const categoryCollection = db.collection('category');
         const borrowedBooksCollection = db.collection('borrowedBooks');
 
-        // Root
         app.get('/', (req, res) => {
-            res.send('📚 Welcome to ReadBooks API');
+            res.send(' Welcome to ReadBooks API');
         });
 
         // Get all categories
@@ -89,7 +115,7 @@ async function run() {
             }
         });
 
-        // 🔥 Fix: Update a book by ID
+        //  Update a book by ID
         app.put('/books/:id', async (req, res) => {
             const { id } = req.params;
             const updatedData = req.body;
@@ -110,7 +136,7 @@ async function run() {
 
                 res.send({ message: 'Book updated successfully' });
             } catch (error) {
-                console.error('❌ Update error:', error);
+                console.error(' Update error:', error);
                 res.status(500).send({ message: 'Failed to update book' });
             }
         });
@@ -120,7 +146,7 @@ async function run() {
             const { name, email, returnDate } = req.body;
             const bookId = req.params.id;
 
-            // ✅ Validate ObjectId
+            // Validate ObjectId
             if (!ObjectId.isValid(bookId)) {
                 return res.status(400).json({ message: 'Invalid book ID' });
             }
@@ -132,7 +158,7 @@ async function run() {
                     return res.status(400).json({ message: 'Book not available.' });
                 }
 
-                // Check if user already borrowed this book and hasn’t returned it
+                // if user already borrowed this book and hasn’t returned it
                 const alreadyBorrowed = await borrowedBooksCollection.findOne({
                     email,
                     bookId: new ObjectId(bookId),
@@ -172,9 +198,14 @@ async function run() {
 
 
         // GET /borrowed?email=user@example.com
-        app.get('/borrowed', async (req, res) => {
+        app.get('/borrowed', verifyFirebaseToken, async (req, res) => {
             const { email } = req.query;
+
             if (!email) return res.status(400).json({ message: 'Email required' });
+
+            if (email !== req.decoded.email) {
+                return res.status(403).message({ message: 'forbidden access' })
+            }
 
             try {
                 const borrowed = await borrowedBooksCollection.find({ email }).toArray();
@@ -214,12 +245,12 @@ async function run() {
 
 
     } catch (err) {
-        console.error('❌ Connection Error:', err);
+        console.error(' Connection Error:', err);
     }
 }
 
 run().catch(console.dir);
 
 app.listen(port, () => {
-    console.log(`🚀 Server running at http://localhost:${port}`);
+    console.log(` Server running at http://localhost:${port}`);
 });
