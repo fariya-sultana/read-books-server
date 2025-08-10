@@ -101,7 +101,7 @@ async function run() {
         // Add a new book
         app.post('/books', async (req, res) => {
             const newBook = req.body;
-            const requiredFields = ['name', 'image', 'author', 'category', 'description', 'rating', 'quantity'];
+            const requiredFields = [ 'image', 'name', 'author', 'category', 'description', 'rating', 'quantity'];
             const missing = requiredFields.filter(field => !newBook[field]);
 
             if (missing.length > 0) {
